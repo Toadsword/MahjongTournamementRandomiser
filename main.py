@@ -24,51 +24,29 @@ def printPlayersMatchedWith():
 
 def setupSession(sessionNumber):
     #init
-    #print("Session number : " + str(sessionNumber))
-    file.write("Session " + str(sessionNumber) + ": \n")
-
-    attempts = 0
-    retry = True
-    while retry:
-        if attempts > 100:
-            return False
-        
-        retry = False
-        tables = []
-        availableplayers = []
-        for index in range(numPlayers):
-            availableplayers.append(index)
-        #Get tables
-        for tableIndex in range(numTables):
-            #table = selectFourPlayersNeverMatched(availableplayers)
-            table = selectFourPlayers(availableplayers)
-            if len(table) != 4: 
-                attempts += 1
-                retry = True
-                break 
-            tables.append(table)
-        
-        for table in tables:
-            file.write("\n")
-            counter = 0
-            for indexPlayer in table:
-                if counter!=0: file.write("\t")
-                file.write(str(players[indexPlayer])) # In the final file, we write correct player Number
-                counter += 1
-                
-            addOpponentsToList(table) #Add playerMatchedWith chosen to the list
-    file.write("\n\n")
-    return True
+    #print("Session number : " + str(sessionNumber))    
+    tables = []
+    availableplayers = []
+    for index in range(numPlayers):
+        availableplayers.append(index)
+    #Get tables
+    for tableIndex in range(numTables):
+        table = selectFourPlayersNeverMatched(availableplayers)
+        #table = selectFourPlayers(availableplayers)
+        addOpponentsToList(table) #Add playerMatchedWith chosen to the list
+        tables.append(table)
+    return tables
 
 def selectFourPlayersNeverMatched(availableplayers):
-    tries = 100
     table = []
     for index in range(4):
+        tries = 100
         areadyPlayedWith = True
         while areadyPlayedWith == True:
             tries -= 1
             if tries == 0:
-                return table
+                areadyPlayedWith = False
+                continue
             
             selectedPlayerIndex = random.randint(0, len(availableplayers) - 1)
 
@@ -92,21 +70,71 @@ def selectFourPlayersNeverMatched(availableplayers):
     #print("table : " + str(table))
     return table
 
-def selectFourPlayers(availableplayers):
-    table = []
-    for index in range(4):
-        selectedPlayerIndex = random.randint(0, len(availableplayers) - 1)            
-        table.append(availableplayers[selectedPlayerIndex])
-        del availableplayers[selectedPlayerIndex]
-    
-
-    return table
-
 def addOpponentsToList(table):
     for playerIndex in table:
         for playerIndex2 in table:
             if(playerIndex != playerIndex2):
                 playerMatchedWith[playerIndex].append(playerIndex2)
+
+#The goal is to fix tables that player already played with with player that he never played with.
+def fixPlayerOpponents(tables):
+
+    #REFAIT TON PSEUDOCODE
+    # On check tous les adversaires de l'adversaire pour voir s'il a un doublon
+    # En cas de doublon, Il faut changer ce joueur de table
+    # Si l'échange de l'adversaire ne pose aucun problème de son côté, on l'intervertis
+    # Sinon, on tente de lui trouver une table où il n'a jamais joué avec les 3 autres joueurs
+    # Si aucune table n'est possible, on ne fait rien et on attend une nouvelle relance
+    
+    # Loop on players
+    for playerIndex in range(len(players) - 1):
+        seen = set()
+        unique = []
+        # Check every opponent this player had
+        for opponent in playerMatchedWith[playerIndex]:
+            if opponent not in seen:
+                #If unseen, does nothing but tracking it
+                unique.append(opponent)
+                seen.add(opponent)
+            else:
+                #If already battled, prepare to swipe the player with a table he never met anyone
+                sessionNumber = int(len(unique) / 3)
+                sessionTables = tables[sessionNumber]
+
+                playerTableNumber = -1
+                for tableNumber in range(len(sessionTables) -1):
+                    if playerIndex in sessionTables[tableNumber]:
+                        playerTableNumber = tableNumber
+                        break
+
+
+                for table in sessionTables:
+                    if playerIndex in sessionTables: 
+                        continue
+
+                    canSwap = True
+                    #Check if new table is ok for the player
+                    for opponentIndex in table:
+                        if opponentIndex in playerMatchedWith[playerIndex]:
+                            canSwap = False
+
+                    if canSwap:
+                        #Check if new table is ok for the opponent
+                        for playerIndex in sessionTables[tableNumber]:
+                            if playerIndex in playerMatchedWith[opponent]:
+                                canSwap = False
+
+                    if canSwap:
+                        #Swaps table
+                        table.append(playerIndex)
+                        sessionTables[playerTableNumber].append(opponent)
+
+                        del table[table.index(opponent)]
+                        del sessionTables[playerTableNumber][sessionTables[playerTableNumber].index(playerIndex)]
+                        tables[sessionNumber] = sessionTables
+                        return
+
+
 
 def findInArray(array, value):
     indexValue = -1
@@ -116,33 +144,48 @@ def findInArray(array, value):
         indexValue = -1
     return indexValue
 
-
-notGood = True
-attemptNumber = 0
-file = open("testTables.txt", "w")
-while notGood:
-    attemptNumber += 1
-    file.close()
+def writeAllInFile(sessionTables):
     file = open("testTables.txt", "w")
-
-    notGood = False
-    numSessions = 7
-    numPlayers = 40
-    numTables = int(numPlayers / 4)
-
-    players = []
-    playerMatchedWith = []
-    tournamentsSession = []
-
-        
-    initVars()
-    #printPlayersMatchedWith()
-    for sessionNumber in range(numSessions):
-        if setupSession(sessionNumber) == False:
-            notGood = True
-            print(str(attemptNumber) + ": stopped at session : " + str(sessionNumber + 1))
-            break
-            #printPlayersMatchedWith()
-
-    print("Done!")
+    
+    sessionNumber = 0
+    for sessionTable in sessionTables:
+        sessionNumber += 1
+        file.write("Session " + str(sessionNumber) + ": \n")
+        for table in sessionTable:
+            counter = 0
+            for indexPlayer in table:
+                if counter!=0: file.write("\t")
+                file.write(str(players[indexPlayer])) # In the final file, we write correct player Number
+                counter += 1
+            file.write("\n")
+        file.write("\n\n")
     file.close()
+
+
+
+notGood = False
+numSessions = 7
+numPlayers = 40
+numTables = int(numPlayers / 4)
+
+players = []
+playerMatchedWith = []
+tournamentsSession = []
+tables = []
+sessionTables = []
+
+    
+initVars()
+#printPlayersMatchedWith()
+# 1. Setup sessions
+for sessionNumber in range(numSessions):
+    tables = setupSession(sessionNumber)
+    sessionTables.append(tables)
+    
+# 2. Fix each players opponents
+for index in range(10000):
+    fixPlayerOpponents(sessionTables)
+
+writeAllInFile(sessionTables)
+
+print("Done!")
