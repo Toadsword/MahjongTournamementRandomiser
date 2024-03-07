@@ -12,6 +12,8 @@
 import random
 
 def initVars():
+    players.clear()
+    playerMatchedWith.clear()
     for index in range(1, numPlayers + 1): #Player numbers
         players.append(index)
         playerMatchedWith.append([])
@@ -32,8 +34,6 @@ def setupSession(sessionNumber):
     #Get tables
     for tableIndex in range(numTables):
         table = selectFourPlayersNeverMatched(availableplayers)
-        #table = selectFourPlayers(availableplayers)
-        addOpponentsToList(table) #Add playerMatchedWith chosen to the list
         tables.append(table)
     return tables
 
@@ -77,7 +77,7 @@ def addOpponentsToList(table):
                 playerMatchedWith[playerIndex].append(playerIndex2)
 
 #The goal is to fix tables that player already played with with player that he never played with.
-def fixPlayerOpponents(tables):
+def fixPlayerOpponents():
 
     #REFAIT TON PSEUDOCODE
     # On check tous les adversaires de l'adversaire pour voir s'il a un doublon
@@ -87,7 +87,8 @@ def fixPlayerOpponents(tables):
     # Si aucune table n'est possible, on ne fait rien et on attend une nouvelle relance
     
     # Loop on players
-    for playerIndex in range(len(players) - 1):
+    couldntFixNumber = 0
+    for playerIndex in range(len(players)):
         seen = set()
         unique = []
         # Check every opponent this player had
@@ -97,44 +98,90 @@ def fixPlayerOpponents(tables):
                 unique.append(opponent)
                 seen.add(opponent)
             else:
+                #print("P" + str(playerIndex) + " already played against p" + str(opponent) + "... Let's fix")
                 #If already battled, prepare to swipe the player with a table he never met anyone
                 sessionNumber = int(len(unique) / 3)
-                sessionTables = tables[sessionNumber]
+                sessionTables = allTables[sessionNumber]
 
-                playerTableNumber = -1
-                for tableNumber in range(len(sessionTables) -1):
-                    if playerIndex in sessionTables[tableNumber]:
-                        playerTableNumber = tableNumber
-                        break
+                # Getting the informations on the playerIndex
+                playerCurrentTableNumber = getPlayerTableNumber(playerIndex, sessionTables)
+                currentTable = sessionTables[playerCurrentTableNumber]
 
-
-                for table in sessionTables:
-                    if playerIndex in sessionTables: 
+                #Let's try to get him a new table to play !
+                newTableIndex = -1
+                for newSessionTableForPlayer in sessionTables:
+                    newTableIndex += 1
+                    if playerIndex in newSessionTableForPlayer: #We skip its current table
                         continue
 
-                    canSwap = True
-                    #Check if new table is ok for the player
-                    for opponentIndex in table:
-                        if opponentIndex in playerMatchedWith[playerIndex]:
-                            canSwap = False
+                    if not hasAlreadyPlayedWithAnyone(opponent, newSessionTableForPlayer):
+                        for otherTablePlayer in newSessionTableForPlayer:
+                            #We don't want to take a player that has already played with the current player
+                            if otherTablePlayer not in playerMatchedWith[playerIndex]:
+                                swapPlayers(sessionNumber, playerCurrentTableNumber, opponent, newTableIndex, otherTablePlayer)
+                                return 1
+                    
+                    # Get one opponent to swap with. The swapped opponent must be okay with the new table
+                    for opponentIndex in newSessionTableForPlayer:
+                        continue
+                        # Check if the opponent has already played with more than two of the players
+                        # Choisir un joueur qui est ok avec la nouvelle table
+                        alreadyMatchedPlayersOnNewTable = []
+                    
+                        for player in currentTable:
+                            #If the player already matched with the new opponent, skip
+                            if player in playerMatchedWith[opponent]:
+                                alreadyMatchedPlayersOnNewTable.append(player)
+                        
+                        #Too many players to be matched with again, not interested
+                        if len(alreadyMatchedPlayersOnNewTable) > 1:
+                            continue
 
-                    if canSwap:
-                        #Check if new table is ok for the opponent
-                        for playerIndex in sessionTables[tableNumber]:
-                            if playerIndex in playerMatchedWith[opponent]:
-                                canSwap = False
+                        # Only one, check if this player can be swapped to the table
+                        if len(alreadyMatchedPlayersOnNewTable) == 1:
+                            #If he never played with any other player...
+                            if not hasAlreadyPlayedWithAnyone(alreadyMatchedPlayersOnNewTable[0], newSessionTableForPlayer):
+                                #WE DO BE SWAPPING
+                                swapPlayers(sessionNumber, playerCurrentTableNumber, opponent, newTableIndex, alreadyMatchedPlayersOnNewTable[0])
+                                return False
 
-                    if canSwap:
-                        #Swaps table
-                        table.append(playerIndex)
-                        sessionTables[playerTableNumber].append(opponent)
+                        #If none, check for any player to be swapped to the new table
+                        if len(alreadyMatchedPlayersOnNewTable) == 0:
+                            #Checks for all players
+                            for opponentIndex in newSessionTableForPlayer:
+                                if not hasAlreadyPlayedWithAnyone(opponentIndex, newSessionTableForPlayer):
+                                    swapPlayers(sessionNumber, playerCurrentTableNumber, opponent, newTableIndex, opponentIndex)
+                                    return False
+                couldntFixNumber += 1
+    return couldntFixNumber
 
-                        del table[table.index(opponent)]
-                        del sessionTables[playerTableNumber][sessionTables[playerTableNumber].index(playerIndex)]
-                        tables[sessionNumber] = sessionTables
-                        return
+def swapPlayers(sessionIndex, tableIndex1, playerIndex1, tableIndex2, playerIndex2):
+   
+    if playerIndex1 in allTables[sessionIndex][tableIndex1] and playerIndex2 in allTables[sessionIndex][tableIndex2]:
+
+        #Swap player table
+        allTables[sessionIndex][tableIndex1].append(playerIndex2)
+        allTables[sessionIndex][tableIndex2].append(playerIndex1)
+        
+        allTables[sessionIndex][tableIndex1].remove(playerIndex1)
+        allTables[sessionIndex][tableIndex2].remove(playerIndex2)
+
+        #Recalculate all opponents
+        calculateAllOpponents()
+        print("Swapped players : session " + str(sessionIndex) + " :  Player " + str(playerIndex1) + " with player " + str(playerIndex2) + " between table " + str(tableIndex1) + " and " + str(tableIndex2))
 
 
+def getPlayerTableNumber(playerIndex, sessionTables):
+    for tableNumber in range(len(sessionTables)):
+        if playerIndex in sessionTables[tableNumber]:
+            return tableNumber
+    raise Exception("Player is not in any table wtf")
+
+def hasAlreadyPlayedWithAnyone(playerIndex, table):
+    for opponent in table:
+        if opponent in playerMatchedWith[playerIndex]:
+            return True
+    return False
 
 def findInArray(array, value):
     indexValue = -1
@@ -144,8 +191,18 @@ def findInArray(array, value):
         indexValue = -1
     return indexValue
 
-def writeAllInFile(sessionTables):
-    file = open("testTables.txt", "w")
+def calculateAllOpponents():
+    playerMatchedWith.clear()
+    
+    for index in range(numPlayers): #Player numbers
+        playerMatchedWith.append([])
+
+    for session in allTables:
+        for table in session:
+            addOpponentsToList(table)
+
+def writeAllInFile(sessionTables, fileName):
+    file = open(fileName + ".txt", "w")
     
     sessionNumber = 0
     for sessionTable in sessionTables:
@@ -162,30 +219,45 @@ def writeAllInFile(sessionTables):
     file.close()
 
 
+attempts = 0
+while attempts < 30:
+    attempts += 1
+    print("Attempt " + str(attempts))
 
-notGood = False
-numSessions = 7
-numPlayers = 40
-numTables = int(numPlayers / 4)
+    notGood = False
+    numSessions = 7
+    numPlayers = 40
+    numTables = int(numPlayers / 4)
 
-players = []
-playerMatchedWith = []
-tournamentsSession = []
-tables = []
-sessionTables = []
+    players = []
+    playerMatchedWith = []
+    allTables = []
 
-    
-initVars()
-#printPlayersMatchedWith()
-# 1. Setup sessions
-for sessionNumber in range(numSessions):
-    tables = setupSession(sessionNumber)
-    sessionTables.append(tables)
-    
-# 2. Fix each players opponents
-for index in range(10000):
-    fixPlayerOpponents(sessionTables)
+    initVars()
+    #printPlayersMatchedWith()
+    # 1. Setup sessions  
+    leftToFix = 0
+    for sessionNumber in range(numSessions):
+        sessionTable = setupSession(sessionNumber)
+        allTables.append(sessionTable)
+        calculateAllOpponents()
+        for index in range(100):
+            leftToFix = fixPlayerOpponents()
+            if leftToFix == 0:
+                print("EVERYTHING IN SESSION " + str(sessionNumber) + " IS CLEAR")
+                break
 
-writeAllInFile(sessionTables)
+    # 2. Fix each players opponents
+    for index in range(100):
+        leftToFix = fixPlayerOpponents()
+        if leftToFix == 0:
+            print("EVERYTHING IS FUCKING FIXED")
+            break
+            
+    print("Left to fix : " + str(leftToFix))
 
-print("Done!")
+    writeAllInFile(allTables, "AfterFix")
+
+    if leftToFix == 0:
+        print("Done in " + str(attempts) + " attempts!")
+        break
