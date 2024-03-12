@@ -107,6 +107,7 @@ def fixPlayerOpponents():
                 playerCurrentTableNumber = getPlayerTableNumber(playerIndex, sessionTables)
                 currentTable = sessionTables[playerCurrentTableNumber]
 
+                #One level
                 #Let's try to get him a new table to play !
                 newTableIndex = -1
                 for newSessionTableForPlayer in sessionTables:
@@ -119,39 +120,31 @@ def fixPlayerOpponents():
                             #We don't want to take a player that has already played with the current player
                             if otherTablePlayer not in playerMatchedWith[playerIndex]:
                                 swapPlayers(sessionNumber, playerCurrentTableNumber, opponent, newTableIndex, otherTablePlayer)
-                                return 1
+                                return 1 # 1 because we want to make another check to make sure everything is alright
                     
-                    # Get one opponent to swap with. The swapped opponent must be okay with the new table
-                    for opponentIndex in newSessionTableForPlayer:
-                        continue
-                        # Check if the opponent has already played with more than two of the players
-                        # Choisir un joueur qui est ok avec la nouvelle table
-                        alreadyMatchedPlayersOnNewTable = []
+                #Two levels
+                newTableIndex = -1
+                #If no player could be swapped easily, try with a n depth swap
+                for newSessionTableForPlayer in sessionTables:
+                    newTableIndex += 1
                     
-                        for player in currentTable:
-                            #If the player already matched with the new opponent, skip
-                            if player in playerMatchedWith[opponent]:
-                                alreadyMatchedPlayersOnNewTable.append(player)
-                        
-                        #Too many players to be matched with again, not interested
-                        if len(alreadyMatchedPlayersOnNewTable) > 1:
-                            continue
-
-                        # Only one, check if this player can be swapped to the table
-                        if len(alreadyMatchedPlayersOnNewTable) == 1:
-                            #If he never played with any other player...
-                            if not hasAlreadyPlayedWithAnyone(alreadyMatchedPlayersOnNewTable[0], newSessionTableForPlayer):
-                                #WE DO BE SWAPPING
-                                swapPlayers(sessionNumber, playerCurrentTableNumber, opponent, newTableIndex, alreadyMatchedPlayersOnNewTable[0])
-                                return False
-
-                        #If none, check for any player to be swapped to the new table
-                        if len(alreadyMatchedPlayersOnNewTable) == 0:
-                            #Checks for all players
-                            for opponentIndex in newSessionTableForPlayer:
-                                if not hasAlreadyPlayedWithAnyone(opponentIndex, newSessionTableForPlayer):
-                                    swapPlayers(sessionNumber, playerCurrentTableNumber, opponent, newTableIndex, opponentIndex)
-                                    return False
+                    if not hasAlreadyPlayedWithAnyone(opponent, newSessionTableForPlayer):
+                        for otherTablePlayer in newSessionTableForPlayer:
+                            #We don't want to take a player that has already played with the current player
+                            if otherTablePlayer in playerMatchedWith[playerIndex]:    
+                                #It will be first swap, but then we need to find another opponent for the problematic player  
+                                # swapPlayers(sessionNumber, playerCurrentTableNumber, opponent, newTableIndex, otherTablePlayer)                          
+                                newTableIndex2 = -1
+                                for newSessionTableForPlayerTwo in sessionTables:
+                                    newTableIndex2 += 1
+                                    if not hasAlreadyPlayedWithAnyone(otherTablePlayer, newSessionTableForPlayerTwo):
+                                        for otherTablePlayerTwo in newSessionTableForPlayerTwo:
+                                            if otherTablePlayerTwo not in playerMatchedWith[playerIndex]:
+                                                #It will be first swap
+                                                swapPlayers(sessionNumber, playerCurrentTableNumber, opponent, newTableIndex, otherTablePlayer)
+                                                #Second swap
+                                                swapPlayers(sessionNumber, playerCurrentTableNumber, otherTablePlayer, newTableIndex2, otherTablePlayerTwo)
+                                                return 1
                 couldntFixNumber += 1
     return couldntFixNumber
 
@@ -168,7 +161,7 @@ def swapPlayers(sessionIndex, tableIndex1, playerIndex1, tableIndex2, playerInde
 
         #Recalculate all opponents
         calculateAllOpponents()
-        print("Swapped players : session " + str(sessionIndex) + " :  Player " + str(playerIndex1) + " with player " + str(playerIndex2) + " between table " + str(tableIndex1) + " and " + str(tableIndex2))
+        #print("Swapped players : session " + str(sessionIndex) + " :  Player " + str(playerIndex1) + " with player " + str(playerIndex2) + " between table " + str(tableIndex1) + " and " + str(tableIndex2))
 
 
 def getPlayerTableNumber(playerIndex, sessionTables):
@@ -182,6 +175,13 @@ def hasAlreadyPlayedWithAnyone(playerIndex, table):
         if opponent in playerMatchedWith[playerIndex]:
             return True
     return False
+
+def howManyPlayerAlreadyPlayedWithAnyone(playerIndex, table):
+    count = 0
+    for opponent in table:
+        if opponent in playerMatchedWith[playerIndex]:
+            count += 1
+    return count
 
 def findInArray(array, value):
     indexValue = -1
@@ -218,46 +218,62 @@ def writeAllInFile(sessionTables, fileName):
         file.write("\n\n")
     file.close()
 
-
-attempts = 0
-while attempts < 30:
-    attempts += 1
-    print("Attempt " + str(attempts))
-
-    notGood = False
-    numSessions = 7
-    numPlayers = 40
-    numTables = int(numPlayers / 4)
-
-    players = []
-    playerMatchedWith = []
-    allTables = []
-
-    initVars()
-    #printPlayersMatchedWith()
-    # 1. Setup sessions  
-    leftToFix = 0
-    for sessionNumber in range(numSessions):
+def addTable():    
+    allFixed = False
+    attempts = 0
+    while not allFixed and attempts < 100:
+        attempts += 1
         sessionTable = setupSession(sessionNumber)
         allTables.append(sessionTable)
         calculateAllOpponents()
         for index in range(100):
             leftToFix = fixPlayerOpponents()
             if leftToFix == 0:
-                print("EVERYTHING IN SESSION " + str(sessionNumber) + " IS CLEAR")
+                allFixed = True
+                print("EVERYTHING IN SESSION " + str(len(allTables)) + " IS CLEAR")
                 break
+        #If not fixed, we reload the table until it's all done
+        if not allFixed:
+            removeTable()
+    if not allFixed:
+        return False
+    return True
 
-    # 2. Fix each players opponents
-    for index in range(100):
-        leftToFix = fixPlayerOpponents()
-        if leftToFix == 0:
-            print("EVERYTHING IS FUCKING FIXED")
-            break
-            
-    print("Left to fix : " + str(leftToFix))
+def removeTable():
+    allTables.pop()  
+    calculateAllOpponents()
 
-    writeAllInFile(allTables, "AfterFix")
 
-    if leftToFix == 0:
-        print("Done in " + str(attempts) + " attempts!")
-        break
+
+notGood = False
+numSessions = 7
+numPlayers = 32
+numTables = int(numPlayers / 4)
+maxPossibleSessions = int((numPlayers - 1) / 3)
+
+if numSessions > maxPossibleSessions:
+    numSessions = maxPossibleSessions
+print("maxPossibleSessions : " + str(maxPossibleSessions))
+
+players = []
+playerMatchedWith = []
+allTables = []
+
+initVars()
+#printPlayersMatchedWith()
+# 1. Setup sessions  
+leftToFix = 0
+sessionNumber = 0
+sessionAttempt = 0
+while len(allTables) < numSessions:
+    sessionAttempt += 1
+    if not addTable():
+        removeTable()
+    else:
+        sessionAttempt = 0
+
+    if sessionAttempt > 10:
+        removeTable()
+
+
+writeAllInFile(allTables, "Tables_" + str(numPlayers) + "players_" + str(numSessions) + "sessions")
